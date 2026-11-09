@@ -40,3 +40,29 @@ def test_glossary_result_reaches_the_model():
         result = agent.run_sync("RAGとは？")
     returns = _parts(result, ToolReturnPart)
     assert returns and returns[0].tool_name == "search_glossary"
+
+
+def test_save_learning_log_waits_for_approval(tmp_path, monkeypatch):
+    from app import tools
+
+    monkeypatch.setattr(tools, "LEARNING_LOG_DIR", tmp_path / "learning_log")
+    model = TestModel(call_tools=["save_learning_log"])
+    with agent.override(model=model):
+        result = agent.run_sync("今日の学習記録を保存して", model=model)
+
+    assert isinstance(result.output, DeferredToolRequests)
+    request = next(call for call in result.output.approvals if call.tool_name == "save_learning_log")
+    assert not (tmp_path / "learning_log").exists()
+
+    approval_model = TestModel(call_tools=[])
+    with agent.override(model=approval_model):
+        approved_result = agent.run_sync(
+            message_history=result.all_messages(),
+            deferred_tool_results=result.output.build_results(
+                approvals={request.tool_call_id: True}
+            ),
+            model=approval_model,
+        )
+
+    assert (tmp_path / "learning_log").exists()
+    assert approved_result.output

@@ -3,12 +3,15 @@
 ここに書いた関数の docstring と型ヒントが、そのままモデルへの「ツールの説明文」になる。
 説明文を書き換えると、モデルがツールを使うかどうか・どんな引数で呼ぶかが変わる。
 """
-
 import json
+import random
+from datetime import datetime
 from functools import cache
 from pathlib import Path
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+ROOT_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = ROOT_DIR / "data"
+LEARNING_LOG_DIR = ROOT_DIR / "learning_log"
 MAX_RESULTS = 3
 
 
@@ -16,6 +19,38 @@ MAX_RESULTS = 3
 def load_glossary() -> list[dict]:
     with open(DATA_DIR / "glossary.json", encoding="utf-8") as f:
         return json.load(f)["terms"]
+
+
+def make_quiz(lecture: int) -> str:
+    """指定した回の用語から1つ選び、確認問題と答えを返す。
+
+    「第2回の確認問題を出して」など、指定した回の復習問題を
+    求められたときに使う。
+    """
+    terms = [term for term in load_glossary() if term["lecture"] == lecture]
+    if not terms:
+        return f"第{lecture}回の用語は用語集にありません。"
+
+    term = random.choice(terms)
+    return f"問題: 「{term['term']}」の意味は？\n答え: {term['definition']}"
+
+
+def save_learning_log(entry: str) -> str:
+    """利用者が依頼した学習記録を日付ごとのファイルに追記する。
+
+    「今日の学習内容を記録して」など、学習内容や気づきを保存したい
+    と利用者が明示したときに使う。
+    """
+    content = entry.strip()
+    if not content:
+        return "学習記録が空のため、保存しませんでした。"
+
+    timestamp = datetime.now().astimezone()
+    path = LEARNING_LOG_DIR / f"{timestamp:%Y-%m-%d}.md"
+    LEARNING_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as log_file:
+        log_file.write(f"\n## {timestamp:%H:%M:%S}\n{content}\n")
+    return f"学習記録を {LEARNING_LOG_DIR.name}/{path.name} に保存しました。"
 
 
 def _normalize(text: str) -> str:
